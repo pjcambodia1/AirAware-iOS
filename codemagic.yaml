@@ -1,12 +1,13 @@
 workflows:
-  airaware-android:
-    name: AirAware Android Build
+  airaware-ios:
+    name: AirAware iOS Cloud Setup Check
     environment:
       node: 22
     scripts:
       - npm install
-      - npm install @capacitor/core @capacitor/cli @capacitor/android
+      - npm install @capacitor/core @capacitor/cli @capacitor/ios
       - npm run build || true
-      - npx cap sync android
+      - npx cap add ios
+      - npx cap sync ios
       - echo "Repo files:" && ls -la
-      - echo "Android files:" && find android -maxdepth 3 -type f | sort
+      - echo "iOS files:" && find ios -maxdepth 3 -type f | sort
