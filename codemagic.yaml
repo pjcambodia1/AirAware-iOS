@@ -1,11 +1,13 @@
 workflows:
   airaware-ios:
     name: AirAware iOS Cloud Setup Check
+
     environment:
       node: 22
+
     scripts:
-      - npm install
-      - npm install @capacitor/core @capacitor/cli @capacitor/ios
+      - npm install --legacy-peer-deps
+      - npm install @capacitor/core @capacitor/cli @capacitor/ios --legacy-peer-deps
       - npm run build || true
       - npx cap add ios
       - npx cap sync ios
