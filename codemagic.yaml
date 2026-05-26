@@ -9,7 +9,9 @@ workflows:
       - npm install --legacy-peer-deps
       - npm install @capacitor/core @capacitor/cli @capacitor/ios --legacy-peer-deps
       - npm run build || true
-      - npx cap add ios
+      - rm -rf ios
+      - npx cap add ios || true
+      - sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '15.0'/" ios/App/Podfile || true
       - npx cap sync ios
       - echo "Repo files:" && ls -la
       - echo "iOS files:" && find ios -maxdepth 3 -type f | sort
