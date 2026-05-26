@@ -1,0 +1,12 @@
+workflows:
+  airaware-android:
+    name: AirAware Android Build
+    environment:
+      node: 22
+    scripts:
+      - npm install
+      - npm install @capacitor/core @capacitor/cli @capacitor/android
+      - npm run build || true
+      - npx cap sync android
+      - echo "Repo files:" && ls -la
+      - echo "Android files:" && find android -maxdepth 3 -type f | sort

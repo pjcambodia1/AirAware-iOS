@@ -1,0 +1,58 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "com.airaware.app"
+    compileSdkVersion 35
+
+    defaultConfig {
+        applicationId "com.airaware.app"
+        minSdkVersion 24
+        targetSdkVersion 35
+        versionCode 1
+        versionName "1.0"
+    }
+
+    signingConfigs {
+        release {
+            def ksFile = file("airaware-release.keystore")
+
+            if (!ksFile.exists()) {
+                throw new GradleException("Release keystore missing at android/app/airaware-release.keystore")
+            }
+            if (!System.getenv("KEYSTORE_PASSWORD")) {
+                throw new GradleException("KEYSTORE_PASSWORD missing")
+            }
+            if (!System.getenv("KEY_ALIAS")) {
+                throw new GradleException("KEY_ALIAS missing")
+            }
+            if (!System.getenv("KEY_PASSWORD")) {
+                throw new GradleException("KEY_PASSWORD missing")
+            }
+
+            storeFile ksFile
+            storePassword System.getenv("KEYSTORE_PASSWORD")
+            keyAlias System.getenv("KEY_ALIAS")
+            keyPassword System.getenv("KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            shrinkResources false
+            debuggable false
+        }
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar"])
+    implementation project(":capacitor-android")
+}
+
+apply from: "capacitor.build.gradle"

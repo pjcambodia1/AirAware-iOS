@@ -1,0 +1,17 @@
+{
+  "appId": "com.airtrueiq.airaware",
+  "appName": "AirAware",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "plugins": {
+    "Geolocation": {
+      "permissions": [
+        "location"
+      ]
+    },
+    "Camera": {}
+  }
+}
