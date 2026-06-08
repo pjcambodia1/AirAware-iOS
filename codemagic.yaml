@@ -2,12 +2,15 @@ workflows:
   airaware-ios-testflight:
     name: AirAware iOS TestFlight
 
+    integrations:
+      app_store_connect: Codemagic-AirAware
+
     environment:
       node: 22
       xcode: latest
-
-    integrations:
-      app_store_connect: Codemagic-AirAware
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.airtrueiq.airaware
 
     scripts:
       - npm install --legacy-peer-deps
