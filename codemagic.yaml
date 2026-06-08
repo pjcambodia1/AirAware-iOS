@@ -20,6 +20,7 @@ workflows:
       - npx cap add ios || true
       - sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '15.0'/" ios/App/Podfile || true
       - npx cap sync ios
+      - perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/App/App.xcodeproj/project.pbxproj
       - xcode-project use-profiles
       - xcode-project build-ipa --workspace ios/App/App.xcworkspace --scheme App
 
