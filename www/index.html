@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AirAware v82r15</title>
+<title>AirAware v82r17</title>
 <style>
   body{margin:0;background:radial-gradient(circle at top,#ffffff 0,#eef6ff 38%,#e8edf5 100%);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#0f172a}
   .app{max-width:480px;margin:auto;padding:16px}
@@ -289,7 +289,7 @@ body{padding-top:calc(var(--apkSafeTop) + env(safe-area-inset-top, 0px));box-siz
 
 <div id="pullRefreshHint" class="pullRefreshHint">Pull to refresh live air data</div>
 <div class="app">
-  <h1>AirAware <span style="font-size:15px;color:#2563eb;vertical-align:middle">v82r15</span></h1>
+  <h1>AirAware <span style="font-size:15px;color:#2563eb;vertical-align:middle">v82r17</span></h1>
   <div class="muted" id="locationLine">No live data loaded</div>
   <button class="light" onclick="openGuideLegend()">Guide / Legend / Terms</button>
 
@@ -332,7 +332,7 @@ body{padding-top:calc(var(--apkSafeTop) + env(safe-area-inset-top, 0px));box-siz
     <button id="locationBtn" onclick="loadLocationFromFields()">Load Weather for Typed Location</button>
     <button class="light" onclick="useGps()">Use Current Location / Phone GPS</button>
     <div class="row">
-      <button class="light" onclick="loadPresetChiclayo()">Preset: Chiclayo, Peru</button>
+      <button class="light" id="presetCityBtn" onclick="loadPresetChiclayo()">Preset: Chiclayo, Peru</button>
       <button class="light" onclick="testApi()">Test API only</button>
     </div>
     <div class="sourcePanel">
@@ -919,9 +919,18 @@ async function startCameraPulse(){
     video.srcObject = pulseStream;
     await video.play();
     const track=pulseStream.getVideoTracks()[0];
-    try{ const caps=track.getCapabilities ? track.getCapabilities() : {}; if(caps.torch) await track.applyConstraints({advanced:[{torch:true}]}); }catch(torchErr){}
+    let torchStatus = 'Torch support not reported by this phone/browser.';
+    try{
+      const caps=track.getCapabilities ? track.getCapabilities() : {};
+      if(caps.torch){
+        await track.applyConstraints({advanced:[{torch:true}]});
+        torchStatus = 'Flashlight/torch is ON.';
+      }
+    }catch(torchErr){
+      torchStatus = 'Torch request blocked; use brightest available room light and cover camera fully.';
+    }
     pulseSamples=[]; pulseStartedAt=performance.now();
-    if(live) live.innerHTML = "Measuring pulse... Keep fingertip over camera. <b>0%</b>";
+    if(live) live.innerHTML = "Measuring pulse... Keep fingertip over rear camera and light. <b>0%</b><br><span class='small'>"+esc(torchStatus)+"</span>";
     pulseTimer=setInterval(samplePulseFrame,100);
     setTimeout(()=>finishCameraPulse(),21000);
   }catch(e){
@@ -1461,7 +1470,7 @@ function buildAirAwarePayload(){
   const bp=bpLoadFactor();
   const pulseTxt=document.getElementById('pulseVal')?.innerText||'';
   const payload={
-    appVersion:'v82r15',
+    appVersion:'v82r17',
     ageGroup: document.getElementById('ageGroup')?.value || 'adult',
     bpProfile: classifiedBpProfile(),
     systolic: parseInt(document.getElementById('sigSys')?.value || 0) || null,
@@ -1492,6 +1501,9 @@ function buildAirAwarePayload(){
     volatility30mClass: volatilityClass(latestDelta30),
     highBpRisk: plainText(document.getElementById('highBp')?.innerHTML)||'unknown',
     lowBpRisk: plainText(document.getElementById('lowBp')?.innerHTML)||'unknown',
+    bpEffect: plainText(document.getElementById('bpEffect')?.innerHTML)||'unknown',
+    meteoProvider: window.airawareMeteoProvider || null,
+    meteoAudit: window.airawareMeteoAudit || [],
     confidencePct: Math.round(c.score),
     freshness: latestFreshLabel || 'unknown',
     adaptive: getAdaptiveBias()
@@ -1502,7 +1514,7 @@ function buildAirAwarePayload(){
     payload.transitionPattern = transition;
     if(payload.transitionPattern && flip) payload.transitionPattern.flipFlop = flip;
     payload.aiSummary = {
-      appVersion:'v82r15',
+      appVersion:'v82r17',
       location: {
         city: plainText(document.getElementById('scoreCity')?.innerHTML)||'',
         country: plainText(document.getElementById('scoreCountry')?.innerHTML)||'',
@@ -1531,6 +1543,10 @@ function buildAirAwarePayload(){
       symptom: payload.symptom,
       highBpRisk: payload.highBpRisk,
       lowBpRisk: payload.lowBpRisk,
+      bpEffect: payload.bpEffect,
+      bpTrafficLight: { highBpRisk: payload.highBpRisk, lowBpRisk: payload.lowBpRisk, effect: payload.bpEffect },
+      meteoProvider: payload.meteoProvider,
+      meteoAudit: payload.meteoAudit,
       bodySensitivityText: plainText(document.getElementById('bodyMapText')?.innerHTML)||'',
       transitionLabel: transition?.type || transition?.status || 'None',
       transitionStatus: transition?.status || 'None',
@@ -1587,7 +1603,7 @@ function localReportFromPayload(p){
     ? `Because your BP profile is low, direction changes and ascent-style shifts may matter more; watch for lightheadedness or unusual fatigue.`
     : `Low-BP sensitivity is ${p.lowBpRisk||'unknown'} from the app and appears secondary unless you personally feel weak or lightheaded.`;
 
-  const bodyNote = `Sensitivity is ${p.sensitivity}/10 with BP profile ${bpLabel}${p.pulseBpm?`, pulse ${p.pulseBpm} bpm`:''}. Body-map percentages show where this app is distributing the current load.`;
+  const bodyNote = `Sensitivity is ${p.sensitivity}/10 with BP profile ${bpLabel}${p.pulseBpm?`, pulse ${p.pulseBpm} bpm`:''}. BP traffic lights: high ${p.highBpRisk||'unknown'}, low ${p.lowBpRisk||'unknown'}, effect ${p.bpEffect||'unknown'}. Body-map percentages show where this app is distributing the current load.`;
   const tp = p.transitionPattern || {};
   const ppdNote = tp.type==='PPD-Recovery Watch'
     ? `The strongest visible PLD burden occurred near ${tp.rows?.find?.(x=>x.pld===tp.visiblePldBurdenPeak)?.time || 'the visible peak'}. Since then, air density continued rising, but PLD burden eased from about ${tp.visiblePldBurdenPeak} m DA to ${tp.currentPLD} m DA. This suggests post-peak recovery divergence rather than a new intensifying PLD event.`
@@ -1680,6 +1696,8 @@ function renderWellnessReport(r, payload=null, mode='local'){
   const ppdLine = r.ppdNote || payload?.transitionPattern?.summary || 'Not specified.';
   const compoundLine = r.compoundTrendNote || r.airPattern || payload?.aiSummary?.compoundTrendNote || 'Not specified.';
   const bodyLine = r.bodySensitivityNote || r.bodySignalNote || 'Not specified.';
+  const bpTraffic = r.bpTrafficLight || r.bpTrafficLights || payload?.aiSummary?.bpTrafficLight || {highBpRisk:payload?.highBpRisk, lowBpRisk:payload?.lowBpRisk, effect:payload?.bpEffect};
+  const bpTrafficLine = (bpTraffic && (bpTraffic.highBpRisk || bpTraffic.lowBpRisk || bpTraffic.effect)) ? `High BP: ${bpTraffic.highBpRisk||'—'} | Low BP: ${bpTraffic.lowBpRisk||'—'} | Effect: ${bpTraffic.effect||'—'}` : '';
   const bpLine = r.bpNote || r.highBpNote || r.lowBpNote || 'Not specified.';
   const pulseLine = r.pulseNote || (payload?.pulseBpm ? ('Pulse '+payload.pulseBpm+' bpm') : 'Not specified.');
 
@@ -1690,6 +1708,7 @@ function renderWellnessReport(r, payload=null, mode='local'){
     <b>Compound DA/PLD:</b> ${esc(compoundLine)}<br>
     <b>PPD / transition:</b> ${esc(ppdLine)}<br>
     <b>BP:</b> ${esc(bpLine)}<br>
+    <b>BP traffic lights:</b> ${esc(bpTrafficLine || 'Not specified.')}<br>
     <b>Pulse:</b> ${esc(pulseLine)}<br>
     <b>Body sensitivity:</b> ${esc(bodyLine)}<br><br>
     <b>Suggestions:</b><br>${suggestions}<br><br>
@@ -1734,7 +1753,7 @@ async function generateWellnessReport(force=false){
     } else {
       payload = {
         source: 'AirAware APK',
-        version: 'v82r15',
+        version: 'v82r17',
         locationLine: document.getElementById('locationLine')?.innerText || '',
         score: document.getElementById('score')?.innerText || '',
         city: document.getElementById('scoreCity')?.innerText || '',
@@ -2151,6 +2170,134 @@ async function fetchJson(url, ms=12000){
     return await r.json();
   } finally { clearTimeout(timer); }
 }
+
+
+/* V82R18_OPTION_A_PRIMARY_RETRY_TEMPORARY_FALLBACK
+   Manual-refresh architecture only.
+   Every new GPS / typed-location / pull-refresh request starts with Open-Meteo Primary.
+   Primary is tried up to 3 total times before any temporary fallback is used.
+   Fallback is for the current request only; it never becomes the default for the next request. */
+const AIRAWARE_METEO_PROVIDERS = [
+  {id:'openmeteo_best_match', name:'Open-Meteo Primary', display:'Primary atmospheric source', model:'', timeoutMs:9000, minutely:true, role:'primary', attempts:3},
+  {id:'openmeteo_gfs_seamless', name:'Open-Meteo GFS temporary backup', display:'Temporary backup source', model:'gfs_seamless', timeoutMs:12000, minutely:true, role:'fallback', attempts:1},
+  {id:'openmeteo_forecast_basic', name:'Open-Meteo Basic temporary backup', display:'Temporary backup source', model:'', timeoutMs:12000, minutely:false, role:'fallback', attempts:1}
+];
+window.airawareMeteoAudit = [];
+window.airawareMeteoProvider = null;
+window.airawareTemporaryFallback = false;
+
+function meteoForecastUrl(lat, lon, provider){
+  const current='temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure';
+  const hourly='temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure';
+  let url=`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current=${current}&hourly=${hourly}&past_days=2&forecast_days=1&timezone=auto`;
+  if(provider.minutely){ url += `&minutely_15=${hourly}`; }
+  if(provider.model){ url += `&models=${encodeURIComponent(provider.model)}`; }
+  return url;
+}
+function validNum(v){ return typeof v === 'number' && Number.isFinite(v); }
+function validateMeteoPayload(w){
+  if(!w || typeof w !== 'object') throw new Error('empty response');
+  if(!w.current || !w.current.time) throw new Error('missing current weather block');
+  const now=w.current;
+  const requiredNow=['temperature_2m','relative_humidity_2m','dew_point_2m','surface_pressure'];
+  const missingNow=requiredNow.filter(k=>!validNum(now[k]));
+  if(missingNow.length) throw new Error('missing current fields: '+missingNow.join(', '));
+  if(!w.hourly || !Array.isArray(w.hourly.time) || w.hourly.time.length<24) throw new Error('missing hourly history');
+  const hourlyFields=['temperature_2m','relative_humidity_2m','dew_point_2m','surface_pressure'];
+  const missingHourly=hourlyFields.filter(k=>!Array.isArray(w.hourly[k]) || w.hourly[k].length !== w.hourly.time.length);
+  if(missingHourly.length) throw new Error('missing hourly fields: '+missingHourly.join(', '));
+  const nowMs=new Date(now.time).getTime();
+  if(!Number.isFinite(nowMs)) throw new Error('invalid current timestamp');
+  const idx24=nearest(w.hourly.time, nowMs-24*3600*1000);
+  if(idx24 < 0) throw new Error('24h reference unavailable');
+  const bad24=hourlyFields.filter(k=>!validNum(w.hourly[k][idx24]));
+  if(bad24.length) throw new Error('24h reference missing fields: '+bad24.join(', '));
+  return {nowMs, idx24, hasMinutely: !!(w.minutely_15 && Array.isArray(w.minutely_15.time) && w.minutely_15.time.length)};
+}
+async function fetchMeteoProviderAttempt(lat, lon, provider, attempt){
+  const started=Date.now();
+  const url=meteoForecastUrl(lat,lon,provider);
+  try{
+    const weather=await fetchJson(url, provider.timeoutMs || 12000);
+    const validation=validateMeteoPayload(weather);
+    return {ok:true, provider, weather, validation, ms:Date.now()-started, attempt};
+  }catch(e){
+    return {ok:false, provider, error:e && e.name==='AbortError' ? 'timeout' : (e.message || String(e)), ms:Date.now()-started, attempt};
+  }
+}
+function meteoMainStatusFor(provider, attempt, maxAttempts){
+  if(provider.role==='primary'){
+    return `Checking primary atmospheric source${maxAttempts>1?` — attempt ${attempt}/${maxAttempts}`:''}...`;
+  }
+  return `Primary unavailable after retries. Checking temporary backup source...`;
+}
+async function fetchVerifiedMeteoChain(lat, lon){
+  const audit=[];
+  window.airawareTemporaryFallback=false;
+  window.airawareMeteoProvider=null;
+
+  for(const provider of AIRAWARE_METEO_PROVIDERS){
+    const maxAttempts = Math.max(1, Number(provider.attempts)||1);
+    for(let attempt=1; attempt<=maxAttempts; attempt++){
+      setText('mainStatus', meteoMainStatusFor(provider, attempt, maxAttempts));
+      const result=await fetchMeteoProviderAttempt(lat,lon,provider,attempt);
+      audit.push({
+        source: provider.name,
+        id: provider.id,
+        role: provider.role,
+        attempt,
+        attemptsAllowed:maxAttempts,
+        ok: !!result.ok,
+        ms: result.ms,
+        error: result.ok ? null : result.error,
+        hasMinutely: !!result.validation?.hasMinutely
+      });
+      if(result.ok){
+        const temporaryFallback = provider.role !== 'primary';
+        window.airawareTemporaryFallback=temporaryFallback;
+        window.airawareMeteoAudit=audit;
+        window.airawareMeteoProvider={
+          id:provider.id,
+          name:provider.name,
+          display:provider.display || provider.name,
+          role:provider.role,
+          temporaryFallback,
+          attemptsUsed:attempt,
+          chainPosition:AIRAWARE_METEO_PROVIDERS.findIndex(p=>p.id===provider.id)+1,
+          hasMinutely:!!result.validation.hasMinutely,
+          checkedAt:new Date().toISOString()
+        };
+        return {weather:result.weather, provider:window.airawareMeteoProvider, audit, validation:result.validation, temporaryFallback};
+      }
+      if(provider.role==='primary' && attempt < maxAttempts){
+        await new Promise(resolve=>setTimeout(resolve, 450));
+      }
+    }
+  }
+  window.airawareMeteoAudit=audit;
+  window.airawareMeteoProvider=null;
+  window.airawareTemporaryFallback=false;
+  throw new Error('All meteo sources failed or returned incomplete data: '+audit.map(a=>a.source+' attempt '+a.attempt+' → '+(a.error||'failed')).join(' | '));
+}
+function meteoAuditHtml(audit){
+  if(!Array.isArray(audit) || !audit.length) return 'No meteo provider audit yet.';
+  return audit.map((a,i)=>`${i+1}. ${esc(a.source)}${a.attemptsAllowed>1?` attempt ${a.attempt}/${a.attemptsAllowed}`:''}: <b class="${a.ok?'ok':'bad'}">${a.ok?'verified':'failed'}</b>${a.ok?(a.hasMinutely?' + 15m data':' + hourly only'):' — '+esc(a.error||'error')} (${a.ms} ms)`).join('<br>');
+}
+function meteoBadgeText(provider, freshLabel, conf){
+  if(provider && provider.temporaryFallback){
+    return `🟡 Backup Source Active • ${esc(freshLabel)} • Confidence: ${esc(conf)} • Primary will retry on next refresh`;
+  }
+  if(provider && provider.role==='primary'){
+    return `🟢 Primary Verified • ${esc(freshLabel)} • Confidence: ${esc(conf)}`;
+  }
+  return `${esc(activeLocationSource.toUpperCase())} • ${esc(freshLabel)} • Confidence: ${esc(conf)}`;
+}
+function meteoVerifyLead(provider, freshCls){
+  if(provider && provider.temporaryFallback){
+    return `<span class="warn">Temporary backup source active.</span> Primary source will be checked first on the next manual refresh.`;
+  }
+  return `<span class="${freshCls}">Primary atmospheric source verified.</span>`;
+}
 function setError(msg){
   latestDeltaH = null; latestDelta30 = null; latestEffect = 'No Data'; latestFreshLabel = null; latestSourceType = null;
   setText('confidenceBadge','Awaiting verified source');
@@ -2224,12 +2371,14 @@ function buildPldTrend6h(w, nowMs){
 }
 
 async function loadForCoords(lat,lon,label,confidenceBase){
-  setText("mainStatus","Loading weather API...");
-  setText("verifyStatus","Loading verification data...");
+  setText("mainStatus","Checking verified meteo sources...");
+  setText("verifyStatus","Verifying primary/backup meteo data before calculation...");
   try{
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure&minutely_15=temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure&past_days=2&forecast_days=1&timezone=auto`;
-    const [w,elev]=await Promise.all([fetchJson(url,12000),getElevation(lat,lon)]);
-    if(!w.current || !w.hourly || !w.hourly.time) throw new Error("API response missing required fields.");
+    const [meteo,elev]=await Promise.all([fetchVerifiedMeteoChain(lat,lon),getElevation(lat,lon)]);
+    const w=meteo.weather;
+    const meteoProvider=meteo.provider;
+    const meteoAudit=meteo.audit || [];
+    if(!w.current || !w.hourly || !w.hourly.time) throw new Error("Verified meteo response missing required fields.");
 
     const now=w.current;
     const nowObj={tempC:now.temperature_2m, rh:now.relative_humidity_2m, dewC:now.dew_point_2m, pressureHpa:now.surface_pressure};
@@ -2269,7 +2418,9 @@ async function loadForCoords(lat,lon,label,confidenceBase){
       daVelocity: latestDaVelocity,
       daAcceleration: latestDaAcceleration,
       transitionFlip: latestTransitionFlip,
-      source: confidenceBase
+      source: confidenceBase,
+      meteoProvider: meteoProvider ? meteoProvider.name : 'unknown',
+      meteoAudit: meteoAudit
     };
     window.pldTrend6h = buildPldTrend6h(w, nowMs);
 
@@ -2298,18 +2449,18 @@ async function loadForCoords(lat,lon,label,confidenceBase){
 
     const ageMin=Math.abs((Date.now()-nowMs)/60000);
     const [freshLabel,freshCls]=clsFresh(ageMin);
-    latestFreshLabel = freshLabel; latestSourceType = confidenceBase; latestLocationLabel = label;
+    latestFreshLabel = freshLabel; latestSourceType = (meteoProvider ? meteoProvider.name : confidenceBase); latestLocationLabel = label;
     updateScoreLocation(label, sc);
     applyEffectPanelPastel(sc);
     let conf=(confidenceBase==="GPS" && freshLabel==="Fresh")?"High":freshLabel==="Stale"?"Low":"Medium";
     conf=activeLocationConfidenceLabel(conf);
     const confCls=conf==="High"?"ok":conf==="Medium"?"warn":"bad";
 
-    setText("src", `Open-Meteo<br>${esc(confidenceBase)}<br>Active: ${esc(activeLocationSource)}`);
+    setText("src", `${esc(meteoProvider ? meteoProvider.name : 'Meteo source')}<br>${esc(confidenceBase)}<br>Active: ${esc(activeLocationSource)}`);
     setText("fresh", `<span class="${freshCls}">${freshLabel}</span>`);
     setText("conf", `<span class="${confCls}">${conf}</span>`);
-    setText("confidenceBadge", `${esc(activeLocationSource.toUpperCase())} • ${freshLabel} • Confidence: ${conf}`);
-    setText("verifyStatus", `<span class="${freshCls}">Verified data loaded.</span> Data age about <b>${ageMin.toFixed(0)} min</b>.`);
+    setText("confidenceBadge", meteoBadgeText(meteoProvider, freshLabel, conf));
+    setText("verifyStatus", `${meteoVerifyLead(meteoProvider, freshCls)} Data age about <b>${ageMin.toFixed(0)} min</b>.<br><b>Provider chain:</b><br>${meteoAuditHtml(meteoAudit)}`);
     setText("times", `Now: <b>${fmt(now.time)}</b><br>24h ref: <b>${fmt(w.hourly.time[idx24])}</b><br>30min ref: <b>${fmt(ref30)}</b>`);
     setText("raw", `Temp: <b>${nowObj.tempC.toFixed(1)}°C</b><br>Humidity: <b>${Math.round(nowObj.rh)}%</b><br>Pressure: <b>${nowObj.pressureHpa.toFixed(1)} hPa</b><br>Dew point: <b>${nowObj.dewC.toFixed(1)}°C</b><br>Actual elevation: <b>${Math.round(elev)} m</b>`);
     setText("computed", `Air density: <b>${rhoNow.toFixed(4)} kg/m³</b><br>Density altitude: <b>${hNow.toFixed(0)} m</b><br>DA burden: <b>${daBurden>=0?"+":""}${daBurden.toFixed(0)} m</b> above actual<br>24h Δ shift: <b>${dH>=0?"+":""}${dH.toFixed(1)} m</b><br>30min Δ shift: <b>${d30===null?"—":(d30>=0?"+":"")+d30.toFixed(1)+" m"}</b><br>DA velocity: <b>${latestDaVelocity===null?"—":latestDaVelocity.toFixed(1)+" m/hr"}</b><br>DA accel: <b>${latestDaAcceleration===null?"—":latestDaAcceleration.toFixed(1)+" m/hr²"}</b><br>Transition flip: <b>${latestTransitionFlip?"YES":"NO"}</b><br>Dynamic DA trigger: <b>${latestDynamicTrigger}</b><br>Score tuning: <b>24h load + corroboration</b>`);
@@ -2324,7 +2475,7 @@ async function loadForCoords(lat,lon,label,confidenceBase){
 
     updateBpTraffic(daBurden, dH, d30);
 
-    setText("mainStatus", `<span class="ok">Live data loaded.</span> Verification panel populated from <b>${esc(activeLocationSource)}</b>.`); updateLocationAudit(); updateSensitivity();
+    setText("mainStatus", `<span class="ok">Live data loaded.</span> Weather verified through <b>${esc(meteoProvider ? meteoProvider.name : 'meteo provider')}</b>; PLD source is <b>${esc(activeLocationSource)}</b>.`); updateLocationAudit(); updateSensitivity();
   }catch(err){
     setError(err.name==="AbortError"?"API timed out after 12 seconds. Try again or use another network/browser.":(err.message||err));
   }
@@ -2396,12 +2547,118 @@ function updateLocationButton(){
   btn.innerText = label ? "Load Weather for " + label : "Load Weather for Typed Location";
 }
 function locationEnter(e){ if(e.key === "Enter") loadLocationFromFields(); }
+function getSavedPresetCity(){
+  try{
+    const raw = localStorage.getItem("airawarePresetCity");
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    if(!data || !data.city || !data.country) return null;
+    return {
+      city: String(data.city || "").trim(),
+      stateRegion: String(data.stateRegion || "").trim(),
+      country: String(data.country || "").trim()
+    };
+  }catch(e){
+    return null;
+  }
+}
+
+function getDefaultPresetCity(){
+  return { city:"Chiclayo", stateRegion:"Lambayeque", country:"Peru" };
+}
+
+function updatePresetButtonLabel(){
+  const btn = document.getElementById("presetCityBtn");
+  if(!btn) return;
+  const preset = getSavedPresetCity() || getDefaultPresetCity();
+  btn.textContent = "Preset: " + preset.city + ", " + preset.country;
+}
+
 function loadPresetChiclayo(){
-  document.getElementById("city").value="Chiclayo";
-  document.getElementById("stateRegion").value="Lambayeque";
-  document.getElementById("country").value="Peru";
+  const preset = getSavedPresetCity() || getDefaultPresetCity();
+  document.getElementById("city").value = preset.city;
+  document.getElementById("stateRegion").value = preset.stateRegion;
+  document.getElementById("country").value = preset.country;
   updateLocationButton();
   loadLocationFromFields();
+}
+
+function saveCurrentLocationAsPreset(){
+  const cityEl = document.getElementById("city");
+  const stateEl = document.getElementById("stateRegion");
+  const countryEl = document.getElementById("country");
+
+  const city = String(cityEl?.value || "").trim();
+  const stateRegion = String(stateEl?.value || "").trim();
+  const country = String(countryEl?.value || "").trim();
+
+  if(!city || !country){
+    alert("Load or type a city and country first, then hold the preset button for 3 seconds.");
+    return;
+  }
+
+  const ok = confirm("Set " + city + ", " + country + " as your preset city?");
+  if(!ok) return;
+
+  try{
+    localStorage.setItem("airawarePresetCity", JSON.stringify({
+      city,
+      stateRegion,
+      country,
+      savedAt: new Date().toISOString()
+    }));
+    updatePresetButtonLabel();
+    alert("Preset updated to " + city + ", " + country + ".");
+  }catch(e){
+    alert("Preset could not be saved on this device.");
+  }
+}
+
+function initPresetLongPress(){
+  const btn = document.getElementById("presetCityBtn");
+  if(!btn || btn.dataset.longPressReady === "1") return;
+  btn.dataset.longPressReady = "1";
+
+  let timer = null;
+  let longPressTriggered = false;
+
+  const start = function(ev){
+    longPressTriggered = false;
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      longPressTriggered = true;
+      saveCurrentLocationAsPreset();
+    }, 3000);
+  };
+
+  const cancel = function(ev){
+    clearTimeout(timer);
+    timer = null;
+  };
+
+  btn.addEventListener("touchstart", start, {passive:true});
+  btn.addEventListener("touchend", cancel, {passive:true});
+  btn.addEventListener("touchcancel", cancel, {passive:true});
+  btn.addEventListener("mousedown", start);
+  btn.addEventListener("mouseup", cancel);
+  btn.addEventListener("mouseleave", cancel);
+
+  // Prevent accidental normal click immediately after a completed long press.
+  btn.addEventListener("click", function(ev){
+    if(longPressTriggered){
+      ev.preventDefault();
+      ev.stopPropagation();
+      longPressTriggered = false;
+    }
+  }, true);
+
+  updatePresetButtonLabel();
+}
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", initPresetLongPress);
+}else{
+  initPresetLongPress();
 }
 function normText(x){ return String(x||"").trim().toLowerCase(); }
 const US_STATE_ALIASES={"al":"alabama","ak":"alaska","az":"arizona","ar":"arkansas","ca":"california","co":"colorado","ct":"connecticut","de":"delaware","fl":"florida","ga":"georgia","hi":"hawaii","id":"idaho","il":"illinois","in":"indiana","ia":"iowa","ks":"kansas","ky":"kentucky","la":"louisiana","me":"maine","md":"maryland","ma":"massachusetts","mi":"michigan","mn":"minnesota","ms":"mississippi","mo":"missouri","mt":"montana","ne":"nebraska","nv":"nevada","nh":"new hampshire","nj":"new jersey","nm":"new mexico","ny":"new york","nc":"north carolina","nd":"north dakota","oh":"ohio","ok":"oklahoma","or":"oregon","pa":"pennsylvania","ri":"rhode island","sc":"south carolina","sd":"south dakota","tn":"tennessee","tx":"texas","ut":"utah","vt":"vermont","va":"virginia","wa":"washington","wv":"west virginia","wi":"wisconsin","wy":"wyoming","dc":"district of columbia"};
@@ -3355,13 +3612,30 @@ function updatePpdDisplay(){
 
 
 <script>
-/* V82R15_LICENSE_GATE_JS */
+/* V82R15_LICENSE_GATE_JS - CONDITIONAL DISTRIBUTION PATCH V3
+   Strategy:
+   - Google Play AAB: no AirTrueIQ activation screen, no startup license-check.
+   - Website/Stripe APK: AirTrueIQ activation screen remains active.
+*/
 (function(){
+  const DISTRIBUTION_CHANNEL = "google_play";
+  // Allowed values:
+  //   "google_play"  = Play Store purchase/install. No license gate.
+  //   "website_apk"  = Website/Stripe APK. License gate required.
+
   const LICENSE_ENDPOINT = 'https://www.airtrueiq.com/api/license-verify';
   const LS_KEY = 'airawareLicenseKey';
   const LS_STATUS = 'airawareLicenseStatus';
   const LS_DEVICE = 'airawareDeviceId';
   const LS_LAST = 'airawareLicenseLastVerifiedAt';
+
+  function isWebsiteApkBuild(){
+    return DISTRIBUTION_CHANNEL === "website_apk";
+  }
+
+  function isGooglePlayBuild(){
+    return DISTRIBUTION_CHANNEL === "google_play";
+  }
 
   function makeDeviceId(){
     try{
@@ -3369,25 +3643,55 @@ function updatePpdDisplay(){
     }catch(e){}
     return 'AA-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,12);
   }
+
   function getDeviceId(){
     let id = localStorage.getItem(LS_DEVICE);
     if(!id){ id = makeDeviceId(); localStorage.setItem(LS_DEVICE,id); }
     return id;
   }
+
   function gate(){ return document.getElementById('licenseGateBack'); }
   function statusBox(){ return document.getElementById('licenseStatusBox'); }
   function metaBox(){ return document.getElementById('licenseMetaBox'); }
+
   function setStatus(msg, cls){
     const el=statusBox(); if(!el) return;
     el.className='licenseStatus' + (cls ? ' '+cls : '');
     el.textContent=msg;
   }
+
   function setMeta(msg){ const el=metaBox(); if(el) el.textContent=msg; }
-  function showGate(){ const g=gate(); if(g) g.classList.add('active'); }
-  function hideGate(){ const g=gate(); if(g) g.classList.remove('active'); }
-  function isVerified(){ return localStorage.getItem(LS_STATUS)==='active' && !!localStorage.getItem(LS_KEY); }
+
+  function hideGate(){
+    const g=gate();
+    if(g) g.classList.remove('active');
+  }
+
+  function showGate(){
+    // FOOLPROOF CONDITION:
+    // The activation modal is allowed to open ONLY for website/Stripe APK builds.
+    if(!isWebsiteApkBuild()){
+      hideGate();
+      return;
+    }
+    const g=gate();
+    if(g) g.classList.add('active');
+  }
+
+  function isVerified(){
+    if(isGooglePlayBuild()) return true;
+    return localStorage.getItem(LS_STATUS)==='active' && !!localStorage.getItem(LS_KEY);
+  }
 
   window.airawareLicenseInfo = function(){
+    if(isGooglePlayBuild()){
+      return {
+        licenseKey: '',
+        status: 'google_play_entitled',
+        deviceId: '',
+        lastVerifiedAt: ''
+      };
+    }
     return {
       licenseKey: localStorage.getItem(LS_KEY)||'',
       status: localStorage.getItem(LS_STATUS)||'unverified',
@@ -3397,6 +3701,13 @@ function updatePpdDisplay(){
   };
 
   window.verifyAirAwareLicense = async function(){
+    // Google Play builds never call the website license API.
+    if(isGooglePlayBuild()){
+      hideGate();
+      setStatus('Google Play install detected. No AirTrueIQ license key required.','good');
+      return;
+    }
+
     const input=document.getElementById('licenseKeyInput');
     const licenseKey=String(input?.value || localStorage.getItem(LS_KEY) || '').trim().toUpperCase();
     if(!licenseKey){ setStatus('Enter a license key first.','bad'); return; }
@@ -3407,7 +3718,7 @@ function updatePpdDisplay(){
       const r=await fetch(LICENSE_ENDPOINT,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({licenseKey, deviceId, appVersion:'v82r15'})
+        body:JSON.stringify({licenseKey, deviceId, appVersion:'v82r17'})
       });
       const data=await r.json().catch(()=>({}));
       if(r.ok && data.ok && data.valid){
@@ -3429,6 +3740,10 @@ function updatePpdDisplay(){
   };
 
   window.retrySavedAirAwareLicense = function(){
+    if(isGooglePlayBuild()){
+      hideGate();
+      return;
+    }
     const saved=localStorage.getItem(LS_KEY)||'';
     const input=document.getElementById('licenseKeyInput');
     if(input) input.value=saved;
@@ -3439,15 +3754,25 @@ function updatePpdDisplay(){
     localStorage.removeItem(LS_KEY);
     localStorage.removeItem(LS_STATUS);
     localStorage.removeItem(LS_LAST);
+    if(isGooglePlayBuild()){
+      hideGate();
+      return;
+    }
     setStatus('Saved license cleared on this device. Enter license key again.','');
     showGate();
   };
 
   window.addEventListener('DOMContentLoaded',()=>{
+    if(isGooglePlayBuild()){
+      hideGate();
+      return;
+    }
+
     const input=document.getElementById('licenseKeyInput');
     const saved=localStorage.getItem(LS_KEY)||'';
     if(input) input.value=saved;
     setMeta('Device ID: '+getDeviceId());
+
     if(!isVerified()) showGate();
   });
 })();
