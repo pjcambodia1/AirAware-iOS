@@ -4,6 +4,7 @@ workflows:
 
     environment:
       node: 22
+      xcode: latest
 
     integrations:
       app_store_connect: Codemagic-AirAware
@@ -11,21 +12,11 @@ workflows:
     scripts:
       - npm install --legacy-peer-deps
       - npm install @capacitor/core @capacitor/cli @capacitor/ios --legacy-peer-deps
-
       - npm run build || true
-
       - rm -rf ios
-
       - npx cap add ios || true
-
-      - sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '15.0'/" ios/App/Podfile || true
-
       - npx cap sync ios
-
-      - cd ios/App
-      - pod install
-      - cd ../..
-
+      - xcode-project use-profiles
       - xcode-project build-ipa \
           --project ios/App/App.xcodeproj \
           --scheme App
