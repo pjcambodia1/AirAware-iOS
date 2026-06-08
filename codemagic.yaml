@@ -20,7 +20,18 @@ workflows:
       - npx cap add ios || true
       - sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '15.0'/" ios/App/Podfile || true
       - npx cap sync ios
+
+      # Apple Privacy Strings
+      - /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'AirAware uses the camera only when you choose to measure pulse and perfusion trends with your finger on the camera.'" ios/App/App/Info.plist || true
+
+      - /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'AirAware does not access your photo library directly. This permission may be requested by camera-related frameworks used for optional pulse and perfusion measurements.'" ios/App/App/Info.plist || true
+
+      - /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'AirAware uses your location to load local atmospheric, density altitude, and weather data for wellness reporting.'" ios/App/App/Info.plist || true
+
+      - /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysAndWhenInUseUsageDescription string 'AirAware may use location while the app is active to provide atmospheric wellness information for your area.'" ios/App/App/Info.plist || true
+
       - perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/App/App.xcodeproj/project.pbxproj
+
       - xcode-project use-profiles
       - xcode-project build-ipa --workspace ios/App/App.xcworkspace --scheme App
 
